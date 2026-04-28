@@ -1,0 +1,3 @@
+[submodule "repos/MaterialClient"]
+	path = repos/MaterialClient
+	url = https://github.com/feewillowherb/MaterialClient.git
