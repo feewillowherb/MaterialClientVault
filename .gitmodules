@@ -1,3 +1,6 @@
 [submodule "repos/MaterialClient"]
 	path = repos/MaterialClient
-	url = https://github.com/feewillowherb/MaterialClient.git
+	url = C:/Users/77162/Documents/Github/feewillowherb/MaterialClient
+[submodule "repos/Fdsoft.Weight.GovClient"]
+	path = repos/Fdsoft.Weight.GovClient
+	url = C:/Users/77162/Documents/Github/FdSoft/Fdsoft.Weight.GovClient
