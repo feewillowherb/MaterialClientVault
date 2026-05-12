@@ -18,104 +18,31 @@ The canonical `index.yaml` fields are:
 
 Keep this structure stable so assistants and tools can understand the vault quickly.
 
----
+## Output Language
 
-## Output Language Configuration
-
-Configure the default output language and rules for handling specialized terminology.
-
-**Parameter Description:**
-
-- `defaultLanguage` — Default output language (e.g., `zh-CN`, `en-US`)
-- `preservedTerms` — List specialized terms/terminology to preserve in their original form
-
-**Example Configuration:**
-
-```yaml
-language:
-  defaultLanguage: en-US
-  preservedTerms:
-    - API names
-    - NuGet package names
-    - Code identifiers
-    - Framework-specific terminology
-    - Brand terms
-```
-
-**Output Rules:**
-
-- Default output language is `{{defaultLanguage}}`.
-- Terms listed in `preservedTerms` are preserved in their original form without translation.
-
----
+- 默认输出语言为中文。专用名词（如函数名、命名空间、NuGet 包名、API 名称等）保留原文不翻译。
 
 ## Research Output Format
 
-All research output should be placed in a dedicated folder under `docs/` rather than scattered as multiple independent files.
-
-### Folder Naming Format
+每次调研产出统一放置在 `docs/` 下的独立文件夹中，而非散落为多个独立文件。文件夹命名格式：
 
 ```
-docs/<YYYY-MM-DD>-<proposal-or-topic-name>/
+docs/<YYYY-MM-DD>-<提案或主题名称>/
 ```
 
-**Naming Rules:**
-
-- Date format: `YYYY-MM-DD` (ISO 8601)
-- Proposal/topic names in English or other languages, with words separated by hyphens `-`
-- Avoid special characters except hyphens
-
-### Folder Structure Example
+示例：
 
 ```
-docs/2026-04-28-example-research-topic/
-├── 00-research-overview.md      # Required: Entry document with summary and TOC
-├── 01-section-name.md
-├── 02-section-name.md
-├── 03-section-name.md
-├── 04-quick-reference.md        # Optional: Quick reference card
-└── assets/                       # Optional: Diagrams, images, etc.
-    ├── diagram.png
-    └── ...
+docs/2026-01-01-topic-name/
+├── 00-调研总览.md
+├── 01-使用指南.md
+├── 02-技术参考.md
+├── 03-快速参考.md
+└── ...
 ```
 
-### Document Numbering Rules
+规则：
 
-- Documents in a folder are numbered sequentially starting from `00`
-- Recommended numbering interval: `00`, `01`, `02`...
-- Each research folder must include a `00-research-overview.md` as the entry point
-
-### 00-research-overview.md Structure Reference
-
-```markdown
-# {{Research Topic}}
-
-**Date:** YYYY-MM-DD
-**Author/Maintainer:** [Name]
-**Status:** [In Progress/Completed]
-
-## Summary
-
-A brief overview of the research.
-
-## Document Navigation
-
-- [01-Section Name](01-section-name.md)
-- [02-Section Name](02-section-name.md)
-- [03-Quick Reference](03-quick-reference.md)
-
-## Key Findings
-
-- Finding 1
-- Finding 2
-- ...
-
-## Related Resources
-
-- Link 1
-- Link 2
-
----
-
-See individual section documents for details.
-```
+- 文件夹名称由日期和提案名称组成，使用连字符分隔。
+- 文件夹内的文档按编号排序，编号从 `00` 开始。
+- 每个调研文件夹应包含一个 `00-调研总览.md` 作为入口索引。
