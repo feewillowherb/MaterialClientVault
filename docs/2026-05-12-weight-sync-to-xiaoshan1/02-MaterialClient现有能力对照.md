@@ -45,7 +45,60 @@
 | 串口通信 | 已有对应 | MaterialClient 已有地磅相关服务 |
 | 稳定性检测 | 已有对应 | 使用时间窗口分析（3000ms），优于 GovClient 的计数器方案 |
 
-### 1.4 配置管理
+### 1.4 附件管理体系（可直接复用）
+
+**核心文件**:
+- `MaterialClient.Common/Entities/AttachmentFile.cs` — 附件文件实体
+- `MaterialClient.Common/Entities/Enums/AttachType.cs` — 附件类型枚举
+- `MaterialClient.Common/Services/AttachmentService.cs` — 附件 CRUD + OSS 同步
+- `MaterialClient.Common/Utils/PathManager.cs` — 相对/绝对路径转换
+
+**AttachmentFile 实体字段**:
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `Id` | int | 主键 |
+| `FileName` | string | 文件名 |
+| `LocalPath` | string | 本地相对路径（数据库存储相对路径，操作时通过 PathManager 转绝对路径） |
+| `OssFullPath` | string? | OSS 完整路径（上传后填充） |
+| `AttachType` | AttachType (short) | 附件类型枚举 |
+| `LastSyncTime` | DateTime? | 最后同步到 OSS 的时间 |
+| 审计字段 | — | Creator/CreateDate/LastEditor/UpdateDate/IsDeleted 等 |
+
+**AttachType 当前枚举值**:
+
+| 值 | 名称 | 说明 |
+|----|------|------|
+| 0 | `UnmatchedEntryPhoto` | 未匹配榜单照片 |
+| 1 | `EntryPhoto` | 进场照片 |
+| 2 | `ExitPhoto` | 出场照片 |
+| 3 | `TicketPhoto` | 票据照片 |
+| **4（新增）** | **`LprCapturePhoto`** | **LRP 车牌识别抓拍照片** |
+
+**AttachmentService 已有能力**:
+
+| 能力 | 方法 | 说明 |
+|------|------|------|
+| 创建附件 | `CreateOrReplaceBillPhotoAsync()` | 保存文件 + 创建 AttachmentFile 实体 + 关联 junction table |
+| 路径管理 | `PathManager.ToRelativePath()` / `ToAbsolutePath()` | 数据库存相对路径保证可移植性 |
+| OSS 上传 | `SyncWaybillAttachmentsToOssAsync()` / `SyncPendingAttachmentsToOssAsync()` | 自动上传到阿里云 OSS |
+| 服务端同步 | `UploadAttachmentInfoToServerAsync()` | 通过 `IMaterialPlatformApi.UpdateAttachesAsync()` 同步附件信息 |
+| 删除/替换 | `CreateOrReplaceBillPhotoAsync()` 内置 | 先删旧附件再创建新附件 |
+
+**关联表**（junction table）:
+- `WeighingRecordAttachment` — 称重记录 ↔ AttachmentFile（多对多）
+- `WaybillAttachment` — 运单 ↔ AttachmentFile（多对多）
+
+**对 LRP 图片的适用性分析**:
+
+LRP 图片与现有附件（进场/出场/票据照片）在数据结构上完全一致：都需要保存本地文件 + 记录路径 + 后续可能同步。因此：
+
+- **可直接复用** `AttachmentFile` 实体存储 LRP 图片
+- **仅需新增** `LprCapturePhoto = 4` 枚举值
+- **无需新建** junction table — LRP 图片通过 `WeightSyncRecord` 中的 `AttachmentFileId` 列表关联（或复用 `WeighingRecordAttachment`）
+- **自动获得** OSS 同步、审计跟踪、路径管理等已有能力
+
+### 1.5 配置管理
 
 **文件**: `MaterialClient.Common/Configuration/`
 
@@ -74,13 +127,25 @@ MaterialClient 中**不存在**任何政府平台同步功能。需要新建：
 | 数据库表 | 在现有 EF Core 上下文中添加 |
 | 数据访问层 | 查询未同步记录、更新同步状态 |
 
-### 2.3 图片保存机制（扩展）
+### 2.3 图片保存机制（复用 AttachmentFile + 新增 AttachType）
 
-| 组件 | 说明 |
-|------|------|
-| LRP 回调图片保存 | 在 `HikvisionLprService` 回调中提取并保存图片 |
-| 图片压缩 | 从 `CaptureDevice.CompressImage` 移植压缩逻辑 |
-| 图片读取 | 同步时从文件系统读取并 Base64 编码 |
+| 组件 | 说明 | 复用/新增 |
+|------|------|-----------|
+| `AttachType.LprCapturePhoto = 4` | 新增枚举值，标识 LRP 抓拍照片 | **新增** |
+| LRP 回调图片保存 | 在 `HikvisionLprService` 回调中提取图片 → 保存到本地 → 创建 `AttachmentFile` 实体 | **修改**（复用 AttachmentService 模式） |
+| 图片压缩 | 从 `CaptureDevice.CompressImage` 移植压缩逻辑（可选） | **新增** |
+| 图片路径关联 | 通过 `AttachmentFile.LocalPath` 存储相对路径，替代 `SnapImages` 逗号分隔方案 | **复用** |
+| 同步时图片读取 | `PathManager.ToAbsolutePath()` + `File.ReadAllBytes()` + Base64 | **复用** |
+
+**与原 GovClient 方案的对比**：
+
+| 维度 | GovClient（原方案） | MaterialClient（新方案） |
+|------|---------------------|-------------------------|
+| 图片路径存储 | `SnapImages` 逗号分隔字符串字段 | `AttachmentFile.LocalPath` 相对路径 + 关联表 |
+| 路径格式 | 绝对路径（`Environment.CurrentDirectory + "\\" + item`） | 相对路径（`PathManager.ToRelativePath()`），操作时转绝对 |
+| 数据完整性 | 无外键约束 | 通过 `AttachmentFile` 实体 + 关联表保证 |
+| OSS 同步 | 不支持 | 自动获得（`OssFullPath` + `LastSyncTime`） |
+| 审计跟踪 | 无 | 自动获得（Creator/CreateDate 等） |
 
 ### 2.4 地磅串口通信（需确认）
 
@@ -147,3 +212,5 @@ MaterialClient 是否已支持 GovClient 使用的特定协议（耀华TF0、嘉
 | **异步模式** | Timer + Monitor 锁 | async/await + Rx.NET |
 | **HTTP 客户端** | HttpWebRequest | IHttpClientFactory / Refit |
 | **SDK 生命周期** | 静态类，手动管理 | 单例服务，DI 管理，IAsyncDisposable |
+| **图片存储** | 绝对路径 + 逗号分隔字符串 | `AttachmentFile` 实体 + 相对路径 + 关联表 |
+| **文件同步** | 无 | `AttachmentService` + OSS + 服务端 API |
