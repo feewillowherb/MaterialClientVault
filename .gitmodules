@@ -4,3 +4,6 @@
 [submodule "repos/Fdsoft.Weight.GovClient"]
 	path = repos/Fdsoft.Weight.GovClient
 	url = C:/Users/77162/Documents/Github/FdSoft/Fdsoft.Weight.GovClient
+[submodule "repos/UrbanManagement"]
+	path = repos/UrbanManagement
+	url = C:/Users/77162/Documents/Github/feewillowherb/UrbanManagement
