@@ -190,7 +190,7 @@ public class GovProject : Entity<Guid>   // 主键为 Guid，非规划的 int
 
 ```csharp
 // 实际代码 — Entities/GovSyncData.cs
-public class GovSyncData : Entity<int>   // 主键为 int，非规划的 long
+public class GovSyncData : Entity<Guid>   // 主键统一为 Guid
 {
     public string? CarNo { get; set; }
     public string? CarColor { get; set; }
@@ -201,31 +201,32 @@ public class GovSyncData : Entity<int>   // 主键为 int，非规划的 long
     public string? BuildLicenseNo { get; set; }
     public string? SiteType { get; set; }
     public string? GoodsWeight { get; set; }
-    public string? SourceData { get; set; }
     public DateTime? AddTime { get; set; }
     public string? ProId { get; set; }
     public string? ProName { get; set; }
     public int? SyncType { get; set; }       // 仍为 int，未改为 enum
     public DateTime? SyncTime { get; set; }
     public int? SyncNumber { get; set; }
+    public int? RetryCount { get; set; }      // 差异字段：重试次数
+    public DateTime? LastErrorTime { get; set; } // 差异字段：最近失败时间
     public string? SnapImages { get; set; }
 }
 ```
 
 **与规划的差异**：
-- 主键 `int`（规划为 `long`）
+- 主键统一为 `Guid`
 - 字段名全部保留旧系统原名（未重命名 `SyncNumber` → `SyncAttempts` 等）
 - `SyncType` 仍为 `int?`，未改为 `SyncStatus` 枚举
 - 无 `ProjectId`/`ProjectName`，使用 `ProId`/`ProName`（与旧系统一致）
-- 无领域方法
+- 相对 `UrbanWeighingRecord` 仅增加差异字段：`RetryCount`、`LastErrorTime`
 
 ### 3.3 GovLog（同步日志）
 
 ```csharp
 // 实际代码 — Entities/GovLog.cs
-public class GovLog : Entity<int>   // 主键为 int，名称为 GovLog（非规划的 GovSyncLog）
+public class GovLog : Entity<Guid>   // 主键统一为 Guid，名称为 GovLog（非规划的 GovSyncLog）
 {
-    public int? SyncId { get; set; }
+    public Guid? SyncId { get; set; }
     public DateTime? SyncTime { get; set; }
     public int? SyncNumber { get; set; }
     public string? SyncSource { get; set; }
@@ -237,7 +238,7 @@ public class GovLog : Entity<int>   // 主键为 int，名称为 GovLog（非规
 
 **与规划的差异**：
 - 类名 `GovLog`（规划为 `GovSyncLog`）— 保持与旧系统一致
-- 主键 `int`（规划为 `long`）
+- 主键统一为 `Guid`
 - 字段名全部保留旧系统原名（`SyncId`/`SyncMsg`，未改为 `SyncDataId`/`Message`）
 
 ### 3.4 UrbanWeighingRecord（新增实体）
@@ -245,14 +246,25 @@ public class GovLog : Entity<int>   // 主键为 int，名称为 GovLog（非规
 ```csharp
 // 实际代码 — Entities/UrbanWeighingRecord.cs
 // 这是规划中不存在的全新实体，用于新客户端（MaterialClient 架构）的称重记录上传
-public class UrbanWeighingRecord : Entity<long>
+public class UrbanWeighingRecord : Entity<Guid>
 {
     public long ClientRecordId { get; set; }   // 客户端记录 ID，唯一索引（幂等去重）
     public string? PlateNumber { get; set; }    // 车牌号
+    public string? VehicleColor { get; set; }   // 车身颜色
+    public string? PlateColor { get; set; }     // 车牌颜色
+    public string? VehicleType { get; set; }    // 车型
     public decimal TotalWeight { get; set; }    // 总重量
     public DateTime WeighingTime { get; set; }  // 称重时间
+    public string? DeviceId { get; set; }       // 设备编号
+    public string? BuildLicenseNo { get; set; } // //TODO 授权文件来源待定
+    public string? SiteType { get; set; }       // //TODO 授权文件来源待定
+    public string? ProId { get; set; }          // //TODO 授权文件来源待定
+    public string? ProName { get; set; }        // //TODO 授权文件来源待定
     public DateTime AddTime { get; set; }       // 入库时间
     public int? SyncType { get; set; }          // 同步类型
+    public DateTime? SyncTime { get; set; }     // 上传时间
+    public int? SyncNumber { get; set; }        // 上传次数
+    public bool IsAnomaly { get; set; }         // 异常标记，异常数据不进入 GovAddress 同步
     public string? SnapImages { get; set; }     // 抓拍图片路径
 }
 ```
@@ -261,7 +273,7 @@ public class UrbanWeighingRecord : Entity<long>
 - 以 MaterialClient 本地 WeighingRecord 为蓝本（OQ-4 原则）
 - `ClientRecordId` 唯一索引，支持幂等去重
 - `TotalWeight` 使用 `decimal`（非 `int`），精度更高
-- 与 GovSyncData 不同，这是服务端接收新客户端数据的实体
+- 与 GovSyncData 大部分字段同构，仅同步扩展字段由 `GovSyncData` 增补（`RetryCount`、`LastErrorTime`）
 
 ## 4. 实际服务层设计
 
@@ -271,7 +283,7 @@ public class UrbanWeighingRecord : Entity<long>
 // IUrbanWeighingRecordAppService.cs（实际代码）
 public interface IUrbanWeighingRecordAppService
 {
-    Task<long> ReceiveAsync(long clientRecordId, string? plateNumber, decimal totalWeight,
+    Task<Guid> ReceiveAsync(long clientRecordId, string? plateNumber, decimal totalWeight,
         DateTime weighingTime, int? syncType = null, string? snapImages = null);
 
     Task<(List<UrbanWeighingRecord> Data, int Total)> GetPagedAsync(
@@ -284,9 +296,9 @@ public interface IUrbanWeighingRecordAppService
 // UrbanWeighingRecordAppService.cs（实际代码）
 public class UrbanWeighingRecordAppService : IUrbanWeighingRecordAppService, ITransientDependency
 {
-    private readonly IRepository<UrbanWeighingRecord, long> _repository;
+    private readonly IRepository<UrbanWeighingRecord, Guid> _repository;
 
-    public async Task<long> ReceiveAsync(...)
+    public async Task<Guid> ReceiveAsync(...)
     {
         // ClientRecordId 去重检查 → 已存在则返回现有 ID
         // 不存在 → 插入新记录
@@ -407,7 +419,7 @@ public class UrbanManagementDbContext : AbpDbContext<UrbanManagementDbContext>
         builder.Entity<GovSyncData>(b =>
         {
             b.ToTable("Gov_SyncData");
-            b.HasKey(e => e.Id);                         // int 主键
+            b.HasKey(e => e.Id);                         // Guid 主键
             b.Property(e => e.CarNo).HasMaxLength(50);
             b.Property(e => e.GoodsWeight).HasMaxLength(50);
             b.Property(e => e.SnapTime).HasMaxLength(100);
@@ -417,7 +429,7 @@ public class UrbanManagementDbContext : AbpDbContext<UrbanManagementDbContext>
         builder.Entity<GovLog>(b =>
         {
             b.ToTable("Gov_Log");
-            b.HasKey(e => e.Id);                         // int 主键
+            b.HasKey(e => e.Id);                         // Guid 主键
             b.Property(e => e.SyncMsg).HasMaxLength(2000);
             b.Property(e => e.SyncResult).HasMaxLength(2000);
         });
@@ -425,7 +437,7 @@ public class UrbanManagementDbContext : AbpDbContext<UrbanManagementDbContext>
         builder.Entity<UrbanWeighingRecord>(b =>
         {
             b.ToTable("Urban_WeighingRecord");
-            b.HasKey(e => e.Id);                         // long 主键
+            b.HasKey(e => e.Id);                         // Guid 主键
             b.Property(e => e.PlateNumber).HasMaxLength(50);
             b.Property(e => e.SnapImages).HasMaxLength(2000);
             b.HasIndex(e => e.ClientRecordId).IsUnique(); // 幂等去重索引

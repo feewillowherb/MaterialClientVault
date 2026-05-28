@@ -1,6 +1,6 @@
 # 04 - API 兼容性方案
 
-> **更新说明**：本文档已根据 UrbanManagement 实际 API 实现更新。当前已实现新客户端 API（UrbanWeighingRecordController），旧客户端兼容层（`POST /Api/Post`）尚未实现。
+> **更新说明**：本文档已根据最新方案更新。当前主链路为 `UrbanWeighingRecord` 接收后再组装 `GovSyncData` 上行远程服务；旧客户端兼容层（`POST /Api/Post`）仍待实现。
 
 ## 1. 当前 API 实现状态
 
@@ -76,6 +76,9 @@ public class UrbanWeighingRecordDto
     public long ClientRecordId { get; set; }   // 客户端记录 ID（幂等去重）
 
     public string? PlateNumber { get; set; }    // 车牌号
+    public string? VehicleColor { get; set; }   // 车身颜色
+    public string? PlateColor { get; set; }     // 车牌颜色
+    public string? VehicleType { get; set; }    // 车型
 
     [Required]
     public decimal TotalWeight { get; set; }    // 总重量
@@ -83,7 +86,16 @@ public class UrbanWeighingRecordDto
     [Required]
     public DateTime WeighingTime { get; set; }  // 称重时间
 
+    public string? DeviceId { get; set; }       // 设备编号
+    public string? BuildLicenseNo { get; set; } // //TODO 授权文件来源待定
+    public string? SiteType { get; set; }       // //TODO 授权文件来源待定
+    public string? ProId { get; set; }          // //TODO 授权文件来源待定
+    public string? ProName { get; set; }        // //TODO 授权文件来源待定
+
     public int? SyncType { get; set; }          // 同步类型
+    public DateTime? SyncTime { get; set; }     // 上传时间
+    public int? SyncNumber { get; set; }        // 上传次数
+    public bool IsAnomaly { get; set; }         // 异常标记
     public string? SnapImages { get; set; }     // 抓拍图片路径
 }
 ```
@@ -93,7 +105,7 @@ public class UrbanWeighingRecordDto
 | 对比项 | 旧客户端（mGovRequestWeight） | 新客户端（UrbanWeighingRecordDto） |
 |--------|-------------------------------|----------------------------------|
 | 字段命名 | camelCase（`carNo`） | PascalCase（`PlateNumber`） |
-| 字段数量 | 16 个字段 | 6 个字段（精简） |
+| 字段数量 | 16 个字段 | 与 GovSyncData 大部分同构（仅缺少 RetryCount/LastErrorTime） |
 | 车牌号 | `carNo` | `PlateNumber` |
 | 重量 | `grossWeight`/`tareWeight`/`goodsWeight` | `TotalWeight`（合并） |
 | 图片 | `snapImages`（Base64 数组） | `SnapImages`（路径字符串） |
@@ -196,7 +208,7 @@ public class CustomDateTimeConverter : JsonConverter<DateTime>
          │                                    │
          ├─→ IGovProjectManager (待实现)       ├─→ IUrbanWeighingRecordAppService
          ├─→ IFileService (待实现)             │    (已实现)
-         └─→ GovSyncData 入库                  └─→ UrbanWeighingRecord 入库
+         └─→ UrbanWeighingRecord 入库          └─→ GovSyncData 组装并上行
 ```
 
 ### 4.3 LegacyApiController 实现（待编码）
@@ -208,7 +220,7 @@ public class CustomDateTimeConverter : JsonConverter<DateTime>
 [Route("Api/[action]")]
 public class LegacyApiController : AbpController
 {
-    private readonly IRepository<GovSyncData, int> _syncDataRepo;
+    private readonly IRepository<GovSyncData, Guid> _syncDataRepo;
     private readonly IRepository<GovProject, Guid> _projectRepo;
     private readonly IFileService _fileService;
     private readonly ILogger<LegacyApiController> _logger;
