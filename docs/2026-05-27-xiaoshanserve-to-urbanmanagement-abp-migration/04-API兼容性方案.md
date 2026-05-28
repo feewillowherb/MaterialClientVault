@@ -45,7 +45,7 @@ public class UrbanWeighingRecordController : AbpController
         // ModelState 验证 → 调用 AppService → ClientRecordId 幂等去重
         var id = await _appService.ReceiveAsync(
             dto.ClientRecordId, dto.PlateNumber, dto.TotalWeight,
-            dto.WeighingTime, dto.SyncType, dto.SnapImages);
+            dto.WeighingTime, dto.SyncType);
 
         return Json(new { success = true, data = new { id } });
     }
@@ -97,7 +97,6 @@ public class UrbanWeighingRecordDto
     public int? ClientRetryCount { get; set; }  // 客户端重试次数
     public DateTime? ClientLastErrorTime { get; set; } // 客户端最近失败时间
     public bool IsAnomaly { get; set; }         // 异常标记
-    public string? SnapImages { get; set; }     // 抓拍图片路径
 }
 ```
 
@@ -109,7 +108,7 @@ public class UrbanWeighingRecordDto
 | 字段数量 | 16 个字段 | 与 GovSyncData 大部分业务字段同构（同步状态不进入 GovSyncData） |
 | 车牌号 | `carNo` | `PlateNumber` |
 | 重量 | `grossWeight`/`tareWeight`/`goodsWeight` | `TotalWeight`（合并） |
-| 图片 | `snapImages`（Base64 数组） | `SnapImages`（路径字符串） |
+| 图片 | `snapImages`（Base64 数组） | `AttachmentFile` 关联（仅 `Lrp`/`UrbanPhoto`） |
 | 接入码 | `buildLicenseNo`/`fdBuildLicenseNo` | 无（由新客户端自行关联） |
 | 去重方式 | 无 | `ClientRecordId` 幂等 |
 
@@ -247,7 +246,7 @@ public class LegacyApiController : AbpController
                 return Json(new { success = false, msg = "接入码未找到", code = -1 });
             }
 
-            // 3. 处理图片 Base64 → 保存
+            // 3. 处理图片 Base64 → 保存为 AttachmentFile（仅 Lrp/UrbanPhoto）
             // 4. 构建 GovSyncData 实体 → 入库
             // 5. 返回兼容格式
 
@@ -361,5 +360,5 @@ public async Task New_API_Should_Accept_UrbanWeighingRecordDto()
 
 1. 实现 LegacyApiController 后，让旧 GovClient 持续运行 48 小时
 2. 对比新旧系统的数据接收记录是否完全一致
-3. 验证图片存储路径可正确访问
+3. 验证 AttachmentFile 本地路径可正确访问（不使用 OSS）
 4. 验证后台同步功能正常

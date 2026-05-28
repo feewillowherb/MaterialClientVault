@@ -204,7 +204,6 @@ public class GovSyncData : Entity<Guid>   // 主键统一为 Guid
     public DateTime? AddTime { get; set; }
     public string? ProId { get; set; }
     public string? ProName { get; set; }
-    public string? SnapImages { get; set; }
 }
 ```
 
@@ -264,7 +263,6 @@ public class UrbanWeighingRecord : Entity<Guid>
     public int? RetryCount { get; set; }        // 服务端同步到 Gov 的重试次数
     public DateTime? LastErrorTime { get; set; } // 服务端同步到 Gov 的最近失败时间
     public bool IsAnomaly { get; set; }         // 异常标记，异常数据不进入 GovAddress 同步
-    public string? SnapImages { get; set; }     // 抓拍图片路径
 }
 ```
 
@@ -273,6 +271,7 @@ public class UrbanWeighingRecord : Entity<Guid>
 - `ClientRecordId` 唯一索引，支持幂等去重
 - `TotalWeight` 使用 `decimal`（非 `int`），精度更高
 - 与 GovSyncData 大部分业务字段同构；同步状态统一维护在 `UrbanWeighingRecord`
+- 图片采用 `AttachmentFile` 关联模型（不使用 OSS），附件类型仅 `Lrp`、`UrbanPhoto`
 
 ## 4. 实际服务层设计
 
@@ -283,7 +282,7 @@ public class UrbanWeighingRecord : Entity<Guid>
 public interface IUrbanWeighingRecordAppService
 {
     Task<Guid> ReceiveAsync(long clientRecordId, string? plateNumber, decimal totalWeight,
-        DateTime weighingTime, int? syncType = null, string? snapImages = null);
+        DateTime weighingTime, int? syncType = null);
 
     Task<(List<UrbanWeighingRecord> Data, int Total)> GetPagedAsync(
         int page = 1, int limit = 20, string? searchText = null,
@@ -361,10 +360,10 @@ public interface IGovProjectManager  // 或作为 AppService
 ### 5.3 图片处理服务（高优先级）
 
 ```csharp
-// 待实现 — Base64 接收 → 保存 → 压缩
+// 待实现 — Base64 接收 → 保存为 AttachmentFile（仅 Lrp/UrbanPhoto）→ 压缩
 public interface IFileService
 {
-    Task<List<string>> SaveAndCompressImagesAsync(string[] base64Images, string buildLicenseNo);
+    Task<List<Guid>> SaveAndCompressImagesAsync(string[] base64Images, string buildLicenseNo, string attachType);
 }
 ```
 
@@ -375,7 +374,7 @@ public interface IFileService
 public class GovSyncBackgroundWorker : AsyncPeriodicBackgroundWorkerBase
 {
     // Timer.Period = 5000 (5秒间隔)
-    // 查询待同步数据 → 读取图片 → HTTP 转发到政府 API → 更新状态
+    // 查询待同步数据 → 读取 AttachmentFile → HTTP 转发到政府 API → 更新状态
 }
 ```
 
@@ -422,7 +421,6 @@ public class UrbanManagementDbContext : AbpDbContext<UrbanManagementDbContext>
             b.Property(e => e.CarNo).HasMaxLength(50);
             b.Property(e => e.GoodsWeight).HasMaxLength(50);
             b.Property(e => e.SnapTime).HasMaxLength(100);
-            b.Property(e => e.SnapImages).HasMaxLength(2000);
         });
 
         builder.Entity<GovLog>(b =>
@@ -438,7 +436,6 @@ public class UrbanManagementDbContext : AbpDbContext<UrbanManagementDbContext>
             b.ToTable("Urban_WeighingRecord");
             b.HasKey(e => e.Id);                         // Guid 主键
             b.Property(e => e.PlateNumber).HasMaxLength(50);
-            b.Property(e => e.SnapImages).HasMaxLength(2000);
             b.HasIndex(e => e.ClientRecordId).IsUnique(); // 幂等去重索引
         });
     }
