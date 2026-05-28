@@ -204,11 +204,6 @@ public class GovSyncData : Entity<Guid>   // 主键统一为 Guid
     public DateTime? AddTime { get; set; }
     public string? ProId { get; set; }
     public string? ProName { get; set; }
-    public int? SyncType { get; set; }       // 仍为 int，未改为 enum
-    public DateTime? SyncTime { get; set; }
-    public int? SyncNumber { get; set; }
-    public int? RetryCount { get; set; }      // 差异字段：重试次数
-    public DateTime? LastErrorTime { get; set; } // 差异字段：最近失败时间
     public string? SnapImages { get; set; }
 }
 ```
@@ -216,9 +211,8 @@ public class GovSyncData : Entity<Guid>   // 主键统一为 Guid
 **与规划的差异**：
 - 主键统一为 `Guid`
 - 字段名全部保留旧系统原名（未重命名 `SyncNumber` → `SyncAttempts` 等）
-- `SyncType` 仍为 `int?`，未改为 `SyncStatus` 枚举
 - 无 `ProjectId`/`ProjectName`，使用 `ProId`/`ProName`（与旧系统一致）
-- 相对 `UrbanWeighingRecord` 仅增加差异字段：`RetryCount`、`LastErrorTime`
+- 仅承载对外发送业务载荷，不持有同步状态字段
 
 ### 3.3 GovLog（同步日志）
 
@@ -261,9 +255,14 @@ public class UrbanWeighingRecord : Entity<Guid>
     public string? ProId { get; set; }          // //TODO 授权文件来源待定
     public string? ProName { get; set; }        // //TODO 授权文件来源待定
     public DateTime AddTime { get; set; }       // 入库时间
-    public int? SyncType { get; set; }          // 同步类型
-    public DateTime? SyncTime { get; set; }     // 上传时间
-    public int? SyncNumber { get; set; }        // 上传次数
+    public int? ClientSyncType { get; set; }    // 客户端同步状态（Client 前缀）
+    public DateTime? ClientSyncTime { get; set; } // 客户端同步时间
+    public int? ClientRetryCount { get; set; }  // 客户端重试次数
+    public DateTime? ClientLastErrorTime { get; set; } // 客户端最近失败时间
+    public int? SyncType { get; set; }          // 服务端同步到 Gov 的状态（无前缀）
+    public DateTime? SyncTime { get; set; }     // 服务端同步到 Gov 的执行时间
+    public int? RetryCount { get; set; }        // 服务端同步到 Gov 的重试次数
+    public DateTime? LastErrorTime { get; set; } // 服务端同步到 Gov 的最近失败时间
     public bool IsAnomaly { get; set; }         // 异常标记，异常数据不进入 GovAddress 同步
     public string? SnapImages { get; set; }     // 抓拍图片路径
 }
@@ -273,7 +272,7 @@ public class UrbanWeighingRecord : Entity<Guid>
 - 以 MaterialClient 本地 WeighingRecord 为蓝本（OQ-4 原则）
 - `ClientRecordId` 唯一索引，支持幂等去重
 - `TotalWeight` 使用 `decimal`（非 `int`），精度更高
-- 与 GovSyncData 大部分字段同构，仅同步扩展字段由 `GovSyncData` 增补（`RetryCount`、`LastErrorTime`）
+- 与 GovSyncData 大部分业务字段同构；同步状态统一维护在 `UrbanWeighingRecord`
 
 ## 4. 实际服务层设计
 

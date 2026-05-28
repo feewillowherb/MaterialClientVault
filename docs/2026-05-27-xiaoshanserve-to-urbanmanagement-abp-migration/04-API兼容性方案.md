@@ -92,9 +92,10 @@ public class UrbanWeighingRecordDto
     public string? ProId { get; set; }          // //TODO 授权文件来源待定
     public string? ProName { get; set; }        // //TODO 授权文件来源待定
 
-    public int? SyncType { get; set; }          // 同步类型
-    public DateTime? SyncTime { get; set; }     // 上传时间
-    public int? SyncNumber { get; set; }        // 上传次数
+    public int? ClientSyncType { get; set; }    // 客户端同步状态（Client 前缀）
+    public DateTime? ClientSyncTime { get; set; } // 客户端同步时间
+    public int? ClientRetryCount { get; set; }  // 客户端重试次数
+    public DateTime? ClientLastErrorTime { get; set; } // 客户端最近失败时间
     public bool IsAnomaly { get; set; }         // 异常标记
     public string? SnapImages { get; set; }     // 抓拍图片路径
 }
@@ -105,7 +106,7 @@ public class UrbanWeighingRecordDto
 | 对比项 | 旧客户端（mGovRequestWeight） | 新客户端（UrbanWeighingRecordDto） |
 |--------|-------------------------------|----------------------------------|
 | 字段命名 | camelCase（`carNo`） | PascalCase（`PlateNumber`） |
-| 字段数量 | 16 个字段 | 与 GovSyncData 大部分同构（仅缺少 RetryCount/LastErrorTime） |
+| 字段数量 | 16 个字段 | 与 GovSyncData 大部分业务字段同构（同步状态不进入 GovSyncData） |
 | 车牌号 | `carNo` | `PlateNumber` |
 | 重量 | `grossWeight`/`tareWeight`/`goodsWeight` | `TotalWeight`（合并） |
 | 图片 | `snapImages`（Base64 数组） | `SnapImages`（路径字符串） |
