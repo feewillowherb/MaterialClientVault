@@ -1,6 +1,6 @@
 schemaVersion: 1
 type: coderef
-title: MaterialClientVault
+title: material-client-vault
 docsRoot: docs
 reposRoot: repos
 ...
